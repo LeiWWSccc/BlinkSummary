@@ -21,9 +21,11 @@ public class MyAccessPath {
     /**
      * list of fields, either they are based on a concrete @value or they indicate a static field
      */
-    private final SootField[] fields;
+    private  SootField[] fields;
 
     private Unit activeStmt ;
+
+    private boolean isStrongUpdateSource = false;
 
     public MyAccessPath() {
         this.value = null;
@@ -35,8 +37,20 @@ public class MyAccessPath {
         this.value = val;
         this.fields = appendingFields;
     }
+    public MyAccessPath(Value val, SootField[] appendingFields, Unit activeStmt, boolean isStrongUpdateSource) {
+        this.value = val;
+        this.fields = appendingFields;
+        this.activeStmt = activeStmt;
+        this.isStrongUpdateSource = isStrongUpdateSource;
+    }
 
+    public boolean isStrongUpdateSource() {
+        return isStrongUpdateSource;
+    }
 
+    public void setStrongUpdateSource(boolean strongUpdateSource) {
+        isStrongUpdateSource = strongUpdateSource;
+    }
 
     public Value getValue() {
         return value;
@@ -48,6 +62,11 @@ public class MyAccessPath {
     public Unit getActiveStmt() {
         return activeStmt;
     }
+
+    public void setFields(SootField[] fields) {
+        this.fields = fields;
+    }
+
 
     public void setActiveStmt(Unit activeStmt) {
         this.activeStmt = activeStmt;
@@ -62,9 +81,25 @@ public class MyAccessPath {
         return ap;
     }
 
+    public MyAccessPath deriveNewApAddfield(SootField addField) {
+        MyAccessPath ap = this.clone();
+        SootField[] oldField = ap.getFields();
+        SootField[] newField = null;
+        if(oldField == null) {
+            newField = new SootField[1];
+            newField[0] = addField;
+        }else {
+            newField = new SootField[oldField.length + 1];
+            System.arraycopy(oldField, 0, newField, 0, oldField.length );
+            newField[oldField.length] = addField;
+        }
+        ap.setFields(newField);
+        return ap;
+    }
+
     public MyAccessPath clone() {
 
-        return new MyAccessPath(value, fields);
+        return new MyAccessPath(value, fields, activeStmt, isStrongUpdateSource);
     }
 
     public boolean isLocal(){
@@ -90,15 +125,19 @@ public class MyAccessPath {
 
         MyAccessPath that = (MyAccessPath) o;
 
+        if (isStrongUpdateSource != that.isStrongUpdateSource) return false;
         if (value != null ? !value.equals(that.value) : that.value != null) return false;
         // Probably incorrect - comparing Object[] arrays with Arrays.equals
-        return Arrays.equals(fields, that.fields);
+        if (!Arrays.equals(fields, that.fields)) return false;
+        return activeStmt != null ? activeStmt.equals(that.activeStmt) : that.activeStmt == null;
     }
 
     @Override
     public int hashCode() {
         int result = value != null ? value.hashCode() : 0;
         result = 31 * result + Arrays.hashCode(fields);
+        result = 31 * result + (activeStmt != null ? activeStmt.hashCode() : 0);
+        result = 31 * result + (isStrongUpdateSource ? 1 : 0);
         return result;
     }
 
@@ -114,6 +153,9 @@ public class MyAccessPath {
                         str += " ";
                     str += fields[i];
                 }
+
+        if(isStrongUpdateSource)
+            str += " | SP";
 
         str += " | " + activeStmt;
 //        if (taintSubFields)

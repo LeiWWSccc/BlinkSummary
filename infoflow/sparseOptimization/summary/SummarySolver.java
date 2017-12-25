@@ -3,6 +3,7 @@ package soot.jimple.infoflow.sparseOptimization.summary;
 import heros.solver.Pair;
 import soot.*;
 import soot.jimple.*;
+import soot.jimple.infoflow.solver.cfg.IInfoflowCFG;
 import soot.jimple.infoflow.sparseOptimization.basicblock.BasicBlockGraph;
 import soot.jimple.infoflow.sparseOptimization.dataflowgraph.BaseInfoStmt;
 import soot.jimple.infoflow.sparseOptimization.dataflowgraph.BaseInfoStmtSet;
@@ -22,6 +23,10 @@ public class SummarySolver {
     Map<DFGEntryKey, MyAccessPath> summaryEntry = new HashMap<>();
 
     private SootMethod method;
+    private IInfoflowCFG iCfg;
+    private IInfoflowCFG backwardsICfg;
+
+    public static Stmt unknownstmt = new
 
     private MyAccessPath createMyAccessPathFormNode(DataFlowNode node) {
 
@@ -42,14 +47,17 @@ public class SummarySolver {
             for(DataFlowNode next : tmpset) {
                 Unit nextStmt = next.getStmt();
                 MyAccessPath target = createMyAccessPathFormNode(next);
-                ret.add(new SummaryPath(node.getStmt(), source, nextStmt, target, next));
+                ret.add(new SummaryPath(node.getStmt(), source, nextStmt, target, next, null));
             }
         }
         return ret;
     }
 
     public SummarySolver( Map<DFGEntryKey, Pair<BaseInfoStmt, DataFlowNode>> dfg ,
-                              Map<DFGEntryKey, Pair<BaseInfoStmt, DataFlowNode>> backwardDfg, BaseInfoStmtSet baseInfoStmtSet, SootMethod m) {
+                              Map<DFGEntryKey, Pair<BaseInfoStmt, DataFlowNode>> backwardDfg, BaseInfoStmtSet baseInfoStmtSet,
+                          SootMethod m, IInfoflowCFG cfg, IInfoflowCFG backwardsICfg) {
+        this.iCfg = cfg;
+        this.backwardsICfg = backwardsICfg;
 
         this.method = m;
 
@@ -75,8 +83,8 @@ public class SummarySolver {
 
         Queue<SummaryPath> worklist = new LinkedList<>();
         worklist.addAll(seedSet);
-        SMForwardFunction forwardFunction = new SMForwardFunction(seedSet);
-        SMBackwardFunction backwardFunction = new SMBackwardFunction(seedSet);
+        SMForwardFunction forwardFunction = new SMForwardFunction(seedSet, iCfg);
+        SMBackwardFunction backwardFunction = new SMBackwardFunction(seedSet,backwardsICfg);
 
         while(!worklist.isEmpty()) {
             SummaryPath source = worklist.poll();
@@ -90,7 +98,7 @@ public class SummarySolver {
             if(ret != null && !ret.isEmpty())
                 for(SummaryPath next : ret) {
 
-                    if(next.isForward() && !next.getdTarget().isActive() && isActiveTaint(source.getTarget(), next.getdTarget().getActiveStmt(), next.getTarget())) {
+                    if(next.isForward() && !next.getTargetAccessPath().isActive() && isActiveTaint(source.getTarget(), next.getTargetAccessPath().getActiveStmt(), next.getTarget())) {
                         next = next.getInactiveCopy();
                     }
                     if(seedSet.contains(next))
@@ -100,6 +108,12 @@ public class SummarySolver {
                 }
 
         }
+
+        Map<Pair<Unit, Value>, SummaryGraph> forwardSummary = forwardFunction.getSummary();
+        Map<Pair<Unit, Value>, SummaryGraph> backwardsSummary = forwardFunction.getSummary();
+
+        int a = 0;
+        return ;
 
     }
 

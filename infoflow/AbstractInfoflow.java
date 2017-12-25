@@ -1,15 +1,7 @@
 package soot.jimple.infoflow;
 
-import java.io.File;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.LinkedList;
-import java.util.List;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import soot.FastHierarchy;
 import soot.PackManager;
 import soot.Scene;
@@ -32,6 +24,9 @@ import soot.jimple.infoflow.nativ.INativeCallHandler;
 import soot.jimple.infoflow.source.DefaultSourceSinkManager;
 import soot.jimple.infoflow.taintWrappers.ITaintPropagationWrapper;
 import soot.options.Options;
+
+import java.io.File;
+import java.util.*;
 
 /**
  * Abstract base class for all data/information flow analyses in FlowDroid
@@ -169,7 +164,7 @@ public abstract class AbstractInfoflow implements IInfoflow {
 	 * @param libPath The Soot classpath containing the libraries
 	 * @param classes The set of classes that shall be checked for data flow
 	 * analysis seeds. All sources in these classes are used as seeds.
-	 * @param sourcesSinks The manager object for identifying sources and sinks
+	 * @param //sourcesSinks The manager object for identifying sources and sinks
 	 */
 	protected void initializeSoot(String appPath, String libPath, Collection<String> classes) {
 		initializeSoot(appPath, libPath, classes,  "");

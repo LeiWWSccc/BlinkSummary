@@ -1,16 +1,20 @@
 package soot.jimple.infoflow.sparseOptimization.summary;
 
+import soot.SootField;
 import soot.Unit;
 import soot.jimple.infoflow.sparseOptimization.dataflowgraph.data.DataFlowNode;
+
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * @author wanglei
  */
 public class SummaryPath {
 
-    private MyAccessPath dSource;
+    private MyAccessPath sourceAccessPath;
 
-    private MyAccessPath dTarget;
+    private MyAccessPath targetAccessPath;
 
     private DataFlowNode targetNode;
 
@@ -20,18 +24,30 @@ public class SummaryPath {
 
     private boolean isForward = true;
 
+    private Set<SootField> killSet;
 
-    public SummaryPath(Unit src, MyAccessPath dSource, Unit target, MyAccessPath dTarget, DataFlowNode targetNode) {
+
+    public SummaryPath(Unit src, MyAccessPath sourceAccessPath,
+                       Unit target, MyAccessPath targetAccessPath, DataFlowNode targetNode,
+                       Set<SootField> killSet) {
         this.src = src;
-        this.dSource = dSource;
+        this.sourceAccessPath = sourceAccessPath;
         this.target = target;
-        this.dTarget = dTarget;
+        this.targetAccessPath = targetAccessPath;
         this.targetNode = targetNode;
+        this.killSet = killSet;
     }
 
+    public Set<SootField> getKillSet() {
+        return killSet;
+    }
 
-    public MyAccessPath getdSource() {
-        return dSource;
+    public void setSourceAccessPath(MyAccessPath sourceAccessPath) {
+        this.sourceAccessPath = sourceAccessPath;
+    }
+
+    public MyAccessPath getSourceAccessPath() {
+        return sourceAccessPath;
     }
 
     public Unit getSrc() {
@@ -40,6 +56,10 @@ public class SummaryPath {
 
     public void setForward(boolean forward) {
         isForward = forward;
+    }
+
+    public void setKillSet(Set<SootField> killSet) {
+        this.killSet = killSet;
     }
 
     public boolean isForward() {
@@ -54,18 +74,26 @@ public class SummaryPath {
         return targetNode;
     }
 
-    public MyAccessPath getdTarget() {
+    public MyAccessPath getTargetAccessPath() {
 
-        return dTarget;
+        return targetAccessPath;
     }
     public SummaryPath getInactiveCopy() {
-        MyAccessPath newtargetNode = dTarget.deriveInactiveAp(null);
+        MyAccessPath newtargetNode = targetAccessPath.deriveInactiveAp(null);
 
-        return new SummaryPath(src, dSource, target, newtargetNode, targetNode);
+        return new SummaryPath(src, sourceAccessPath, target, newtargetNode, targetNode, killSet);
     }
 
     public SummaryPath deriveNewMyAccessPath(Unit newStmt, MyAccessPath newTarget, DataFlowNode targetNode) {
-        return new SummaryPath(src, dSource, newStmt, newTarget, targetNode);
+        return deriveNewMyAccessPath(null, newStmt, newTarget, targetNode);
+    }
+
+    public SummaryPath deriveNewMyAccessPath(MyAccessPath newSrcAp,  Unit newStmt, MyAccessPath newTarget, DataFlowNode targetNode) {
+
+        SummaryPath newSp =  new SummaryPath(src, sourceAccessPath, newStmt, newTarget, targetNode, killSet);
+        if(newSrcAp != null)
+            newSp.setSourceAccessPath(newSrcAp);
+        return newSp;
     }
 
     @Override
@@ -76,17 +104,36 @@ public class SummaryPath {
         SummaryPath that = (SummaryPath) o;
 
         if (isForward != that.isForward) return false;
-        if (dSource != null ? !dSource.equals(that.dSource) : that.dSource != null) return false;
-        if (dTarget != null ? !dTarget.equals(that.dTarget) : that.dTarget != null) return false;
+        if (sourceAccessPath != null ? !sourceAccessPath.equals(that.sourceAccessPath) : that.sourceAccessPath != null) return false;
+        if (targetAccessPath != null ? !targetAccessPath.equals(that.targetAccessPath) : that.targetAccessPath != null) return false;
         if (targetNode != null ? !targetNode.equals(that.targetNode) : that.targetNode != null) return false;
         if (src != null ? !src.equals(that.src) : that.src != null) return false;
         return target != null ? target.equals(that.target) : that.target == null;
     }
 
+    public SummaryPath clone() {
+        return new SummaryPath(src, sourceAccessPath, target, targetAccessPath, targetNode, killSet);
+    }
+
+    public SummaryPath deriveNewPathWithKillSet(SootField field) {
+        SummaryPath ret = null;
+        if(this.killSet == null) {
+            Set<SootField> set = new HashSet<>();
+            set.add(field);
+            ret = this.clone();
+            ret.setKillSet(set);
+        }else {
+            killSet.add(field);
+            ret =  this;
+        }
+        return ret;
+    }
+
+
     @Override
     public int hashCode() {
-        int result = dSource != null ? dSource.hashCode() : 0;
-        result = 31 * result + (dTarget != null ? dTarget.hashCode() : 0);
+        int result = sourceAccessPath != null ? sourceAccessPath.hashCode() : 0;
+        result = 31 * result + (targetAccessPath != null ? targetAccessPath.hashCode() : 0);
         result = 31 * result + (targetNode != null ? targetNode.hashCode() : 0);
         result = 31 * result + (src != null ? src.hashCode() : 0);
         result = 31 * result + (target != null ? target.hashCode() : 0);
@@ -96,6 +143,6 @@ public class SummaryPath {
 
     @Override
     public String toString(){
-        return (isForward()?"[F]":"[B]")+" Target{ " + dTarget.toString() + " }"  ;
+        return (isForward()?"[F]":"[B]")+" Target{ " + targetAccessPath.toString() + " }"  ;
     }
 }

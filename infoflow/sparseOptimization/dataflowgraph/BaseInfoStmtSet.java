@@ -136,6 +136,10 @@ public class BaseInfoStmtSet {
 
             }
             if(baseInfo.rightFields != null && baseInfo.rightFields.length == 1) {
+
+                //可以把primtype的优化掉
+                //baseInfo.base.getType() instanceof PrimType
+
                 DataFlowNode fordataFlowNode = DataFlowNodeFactory.v().createDataFlowNode
                         (baseInfo.stmt, baseInfo.base, baseInfo.rightFields[0], false);
                 Pair<BaseInfoStmt, DataFlowNode> forpath = new Pair<BaseInfoStmt, DataFlowNode>(baseInfo, fordataFlowNode);

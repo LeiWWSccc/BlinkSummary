@@ -6,6 +6,8 @@ import soot.Unit;
 import soot.Value;
 import soot.jimple.AssignStmt;
 import soot.jimple.Stmt;
+import soot.jimple.infoflow.solver.cfg.IInfoflowCFG;
+import soot.jimple.infoflow.sparseOptimization.basicblock.BasicBlockGraph;
 import soot.jimple.infoflow.sparseOptimization.dataflowgraph.DataFlowGraphQuery;
 import soot.jimple.infoflow.sparseOptimization.dataflowgraph.data.DataFlowNode;
 import soot.jimple.infoflow.util.BaseSelector;
@@ -25,9 +27,15 @@ public class SMForwardFunction {
 
     final private Set<SummaryPath> jumpFunction;
 
+    final IInfoflowCFG iCfg;
 
-    public SMForwardFunction(Set<SummaryPath> jumpFunction) {
+    public Map<Pair<Unit, Value>, SummaryGraph> getSummary() {
+        return summary;
+    }
+
+    public SMForwardFunction(Set<SummaryPath> jumpFunction, IInfoflowCFG iCfg) {
         this.jumpFunction = jumpFunction;
+        this.iCfg = iCfg;
     }
 
 
@@ -41,18 +49,17 @@ public class SMForwardFunction {
         Stmt targetStmt = (Stmt)path.getTarget();
 
         Set<SummaryPath> res = null;
-        if(targetStmt.containsInvokeExpr()) {
+        if(targetStmt.containsInvokeExpr() || iCfg.isExitStmt(targetStmt)) {
            res =  propagateCall(path);
         }else {
            res =  propagateNormal(path);
         }
-
         return res;
     }
 
     private Set<SummaryPath> propagateCall(SummaryPath path) {
 
-        MyAccessPath source = path.getdSource();
+        MyAccessPath source = path.getSourceAccessPath();
         Value base = source.getValue();
 
         Pair<Unit, Value> key = new Pair<Unit, Value>(path.getSrc(), base);
@@ -98,16 +105,18 @@ public class SMForwardFunction {
         if(rightField.equals(DataFlowNode.baseField)) {
             remainFields = apFields;
         }else  {
-            if(apFields == null)
-                throw new RuntimeException("rightfield not equal !");
+            if(apFields == null) {
+                // b = a.f  source : a
+                remainFields = null;
 
-            if(rightField != apFields[0]) {
+            }else if(rightField != apFields[0]) {
                 return null;
             }else {
                 if(apFields.length > 1) {
                     remainFields = new SootField[apFields.length - 1];
                     System.arraycopy(apFields, 1, remainFields, 0, apFields.length - 1);
                 }else {
+                    // b = a.f  source : a.f
                     remainFields = null;
                 }
             }
@@ -127,21 +136,136 @@ public class SMForwardFunction {
         final Value[] rightVals = BaseSelector.selectBaseList(right, true);
 
         DataFlowNode targetNode = path.getTargetNode();
-        MyAccessPath sourceAp = path.getdTarget();
+        MyAccessPath sourceAp = path.getTargetAccessPath();
 
-        MyAccessPath targetAp = path.getdTarget();
+        MyAccessPath targetAp = path.getTargetAccessPath();
         // p = a.f
         // p = a ;
         // p.f = a
         Set<SummaryPath> res = new HashSet<>();
 
-        if(!targetNode.getIsLeft()) {
+        if(targetNode.getIsLeft()){
+
+            //source 跟左边匹配的情况，主要是处理strong update
+
+            Pair<Value, SootField> pair = BasicBlockGraph.getBaseAndField(left);
+            Value leftBase = pair.getO1();
+            SootField leftField = pair.getO2();
+
+            if(leftBase.equals(targetAp.getValue()) && leftField == null ) {
+                // a = source ; or a.f1 = source; or a.f2 = source;
+                // a = "xxx";
+                // kill source
+
+            }else if (leftBase.equals(targetAp.getValue())) {
+                if(targetAp.getFields() == null) {
+                    // a = source ;
+                    // b = a;
+                    // b.f1 = xxx;
+                    // add f1 to the summarypath's kill set
+                    SummaryPath newPath = path.deriveNewPathWithKillSet(leftField);
+                    DataFlowNode sourceDfn = DataFlowGraphQuery.v().
+                            useBaseTofindForwardDataFlowGraph(targetAp.getValue(), src, false);
+                    if(sourceDfn.getSuccs() != null)
+                        for(Set<DataFlowNode> tmpSet : sourceDfn.getSuccs().values()) {
+                            for(DataFlowNode nextNode : tmpSet) {
+                                res.add(newPath);
+                            }
+                        }
+
+
+                }else {
+                    SootField firstField = targetAp.getFields()[0];
+                    if(firstField.equals(leftField)) {
+                        // a.f1 = source
+                        // a.f1 = xxx;
+                    } else {
+
+                        //其实不应该到这里
+                        //System.out.println("should not reach here!");
+                        // a.f1 = source
+                        // a.f2 = xxx
+                    }
+
+                }
+
+            } else {
+                //其实不应该到这里
+                System.out.println("A2 should not reach here!");
+            }
+        } else {
             // 这个是source在右边的情况
             // b = a / b = a.f  此时source是 a / a.f的情况
             // 要做的就是把 b 标记
             //但是存在 b = a 但是 source 是a.f的情况， 所以需要
 
-            MyAccessPath newLeftAp = getLeftMyAccessPath(left, targetNode.getValue(), targetNode.getField(), path.getdTarget());
+            // 四种情况
+//            if() {
+//                // b = a : source : a
+//
+//            }else if() {
+//                // b = a : source a.f
+//
+//            }else if() {
+//                // b = a.f ; source: a
+            //这个算法很复杂，我们需要重新修改sourceAp了
+
+//
+//            }else {
+//                // b = a.f ; source : a.f
+//            }
+            if(!targetAp.getValue().equals(targetNode.getValue())) {
+                throw new RuntimeException("B1 base not equal!");
+            }
+            SootField rightField = targetNode.getField();
+
+            //首先处理kill set
+            if(path.getKillSet() != null && !rightField.equals(DataFlowNode.baseField)) {
+                if(path.getKillSet().contains(rightField)) {
+                    return res;
+                }
+            }
+
+            SootField[] apFileds = path.getTargetAccessPath().getFields();
+            MyAccessPath newSourceAp = null;
+            if(apFileds == null) {
+                // source 是 a 的情况
+                if(rightField.equals(DataFlowNode.baseField)) {
+                    // b = a : source : a
+
+                }else {
+                    // b = a.f : source a
+                    //
+                    newSourceAp = path.getSourceAccessPath().deriveNewApAddfield(rightField);
+                    //如果a是一个别名相关（由后向分析产生的）值，会存在update的情况
+                    if(!path.getTargetAccessPath().isActive()) {
+                        newSourceAp.setStrongUpdateSource(true);
+                    }
+
+                }
+
+            }else {
+
+                if(rightField.equals(DataFlowNode.baseField)) {
+                    // b = a : source a.f
+
+
+                }else if(apFileds[0].equals(rightField)) {
+
+                    // b = a.f : source a.f
+                    //如果a.f是一个别名相关（由后向分析产生的）值，会存在update的情况
+                    if(!path.getTargetAccessPath().isActive()) {
+                        newSourceAp = path.getSourceAccessPath().clone();
+                        newSourceAp.setStrongUpdateSource(true);
+                    }
+
+                }else {
+                    //should not reach here!
+                    return res;
+                }
+            }
+
+            MyAccessPath newLeftAp = getLeftMyAccessPath(left, targetNode.getValue(), targetNode.getField(), path.getTargetAccessPath());
 
             // a.f1 但是 source is a.f2
             if(newLeftAp == null)
@@ -150,14 +274,17 @@ public class SMForwardFunction {
             if(SummarySolver.canHaveAliases(assignStmt, left, targetAp)) {
 
                 //alias
-                MyAccessPath newBackwardAp = newLeftAp.deriveInactiveAp(src);
+                MyAccessPath newBackwardAp = newLeftAp;
+                if(newLeftAp.isActive()) {
+                    newBackwardAp = newLeftAp.deriveInactiveAp(src);
+                }
 
                 DataFlowNode next = DataFlowGraphQuery.v().useValueTofindBackwardDataFlowGraph(left, src);
 
                 if(next.getSuccs() != null)
                     for(Set<DataFlowNode> tmpSet : next.getSuccs().values()) {
                         for(DataFlowNode nextNode : tmpSet) {
-                            SummaryPath nextPath = path.deriveNewMyAccessPath(nextNode.getStmt(), newBackwardAp, nextNode);
+                            SummaryPath nextPath = path.deriveNewMyAccessPath(newSourceAp, nextNode.getStmt(), newBackwardAp, nextNode);
                             nextPath.setForward(false);
                             res.add(nextPath);
                         }
@@ -171,11 +298,13 @@ public class SMForwardFunction {
             if(next.getSuccs() != null)
                 for(Set<DataFlowNode> tmpSet : next.getSuccs().values()) {
                     for(DataFlowNode nextNode : tmpSet) {
-                        SummaryPath nextPath = path.deriveNewMyAccessPath(nextNode.getStmt(), newLeftAp, nextNode);
+                        SummaryPath nextPath = path.deriveNewMyAccessPath(newSourceAp, nextNode.getStmt(), newLeftAp, nextNode);
                         res.add(nextPath);
                     }
                 }
         }
+
+
         return res;
 
 

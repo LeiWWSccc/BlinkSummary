@@ -12,6 +12,7 @@ import soot.jimple.infoflow.sparseOptimization.basicblock.BasicBlockGraph;
 import soot.jimple.infoflow.sparseOptimization.dataflowgraph.data.DFGEntryKey;
 import soot.jimple.infoflow.sparseOptimization.dataflowgraph.data.DataFlowNode;
 import soot.jimple.infoflow.sparseOptimization.summary.SummarySolver;
+import soot.jimple.infoflow.util.SystemClassHandler;
 import soot.jimple.toolkits.callgraph.ReachableMethods;
 
 import java.util.*;
@@ -91,7 +92,7 @@ public class InnerBBFastBuildDFGSolver {
                     Value base = entry.getKey();
                     BaseInfoStmtSet baseInfoStmtSet = entry.getValue();
 
-                    SummarySolver summarySolver = new SummarySolver(newDfg,newBackwardDfg,  baseInfoStmtSet, m);
+                    SummarySolver summarySolver = new SummarySolver(newDfg, newBackwardDfg,  baseInfoStmtSet, m, iCfg);
                     summarySolver.solve();
 
                 }
@@ -133,9 +134,9 @@ public class InnerBBFastBuildDFGSolver {
         if (m.hasActiveBody()) {
             // Check whether this is a system class we need to ignore
             final String className = m.getDeclaringClass().getName();
-//            if (config.getIgnoreFlowsInSystemPackages()
-//                    && SystemClassHandler.isClassInSystemPackage(className))
-//                return ;
+            if (config.getIgnoreFlowsInSystemPackages()
+                    && SystemClassHandler.isClassInSystemPackage(className))
+                return ;
 
             //debug 遍历需要调试的名字，匹配则打印、或断点
             for(String func :debugFunc) {
@@ -175,9 +176,9 @@ public class InnerBBFastBuildDFGSolver {
 
             //printer(m, baseToDfg, backwardBaseToDfg);
 
-            dfg.put(m, baseToDfg);
-            backwardDfg.put(m, backwardBaseToDfg);
-            returnInfo.put(m, returnInfoMap);
+            //dfg.put(m, baseToDfg);
+            //backwardDfg.put(m, backwardBaseToDfg);
+            //returnInfo.put(m, returnInfoMap);
 
         }
         return ;
