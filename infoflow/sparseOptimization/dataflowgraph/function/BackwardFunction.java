@@ -67,7 +67,7 @@ public class BackwardFunction extends AbstractFunction {
                     // a = b;
                     // a.f1 = pwd;
 
-                    newNode = DataFlowNodeFactory.v().createDataFlowNode(target.stmt, target.base, targetLeftField, false);
+                    newNode = DataFlowNodeFactory.v().createDataFlowNode(target.stmt, target.base, targetLeftField, true);
                     newNode = getNewDataFlowNode(target, newNode);
                     source.setSuccs(sourceField, newNode);
                     //res.add(newNode);
@@ -76,7 +76,7 @@ public class BackwardFunction extends AbstractFunction {
                     //(1.1.2) a.f1 = xxx; source : a.f1  , gen f1 -> <a.f1>
                     // a.f1 = b;
                     // a.f1 = pwd;
-                    newNode = DataFlowNodeFactory.v().createDataFlowNode(target.stmt, target.base, targetLeftField, false);
+                    newNode = DataFlowNodeFactory.v().createDataFlowNode(target.stmt, target.base, targetLeftField, true);
                     newNode = getNewDataFlowNode(target, newNode);
                     source.setSuccs(sourceField, newNode);
                    // source.setKillField(targetLeftField);
@@ -150,7 +150,7 @@ public class BackwardFunction extends AbstractFunction {
                     // a.f = pwd;
 
 
-                    newNode = DataFlowNodeFactory.v().createDataFlowNode(target.stmt, target.base, targetLeftField, false);
+                    newNode = DataFlowNodeFactory.v().createDataFlowNode(target.stmt, target.base, targetLeftField, true);
                     newNode = getNewDataFlowNode(target, newNode);
                     source.setSuccs(sourceField, newNode);
                     if(!(target.stmt instanceof IdentityStmt))
@@ -158,7 +158,7 @@ public class BackwardFunction extends AbstractFunction {
 
                 } else {
                     //(1) a.f1 = xxx ; source : a  , gen new a.f1
-                    newNode = DataFlowNodeFactory.v().createDataFlowNode(target.stmt, target.base, targetLeftField, false);
+                    newNode = DataFlowNodeFactory.v().createDataFlowNode(target.stmt, target.base, targetLeftField, true);
                     newNode = getNewDataFlowNode(target, newNode);
                     source.setSuccs(sourceField, newNode);
                 }

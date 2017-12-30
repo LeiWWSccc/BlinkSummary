@@ -10,6 +10,7 @@ import soot.jimple.infoflow.solver.cfg.IInfoflowCFG;
 import soot.jimple.infoflow.sparseOptimization.basicblock.BasicBlockGraph;
 import soot.jimple.infoflow.sparseOptimization.dataflowgraph.DataFlowGraphQuery;
 import soot.jimple.infoflow.sparseOptimization.dataflowgraph.data.DataFlowNode;
+import soot.jimple.infoflow.sparseOptimization.utils.Utils;
 import soot.jimple.infoflow.util.BaseSelector;
 
 import java.util.HashMap;
@@ -23,18 +24,21 @@ import java.util.Set;
 public class SMForwardFunction {
 
 
-    final private Map<Pair<Unit, Value>, SummaryGraph> summary = new HashMap<>();
+    final private Map<Pair<Unit, Value>, SummaryGraph> forwardSummary = new HashMap<>();
+    final private Map<Pair<Unit, Value>, SummaryGraph> backwardsSummary = new HashMap<>();
 
-    final private Set<SummaryPath> jumpFunction;
 
     final IInfoflowCFG iCfg;
 
-    public Map<Pair<Unit, Value>, SummaryGraph> getSummary() {
-        return summary;
+    public Map<Pair<Unit, Value>, SummaryGraph> getForwardSummary() {
+        return forwardSummary;
     }
 
-    public SMForwardFunction(Set<SummaryPath> jumpFunction, IInfoflowCFG iCfg) {
-        this.jumpFunction = jumpFunction;
+    public Map<Pair<Unit, Value>, SummaryGraph> getBackwardsSummary() {
+        return backwardsSummary;
+    }
+
+    public SMForwardFunction(IInfoflowCFG iCfg) {
         this.iCfg = iCfg;
     }
 
@@ -65,12 +69,26 @@ public class SMForwardFunction {
         Pair<Unit, Value> key = new Pair<Unit, Value>(path.getSrc(), base);
 
         SummaryGraph graph = null;
-        if(summary.containsKey(key)) {
-            graph = summary.get(key);
-            graph.merge(path);
-        }else {
-            graph = new SummaryGraph(path);
-            summary.put(key, graph);
+        if(source.getActiveStmt() == null) {
+            if(forwardSummary.containsKey(key)) {
+                graph = forwardSummary.get(key);
+                graph.merge(path);
+            }else {
+                graph = new SummaryGraph(path);
+                forwardSummary.put(key, graph);
+            }
+
+
+        }else if(source.getActiveStmt().equals(Utils.unknownStmt)) {
+
+            if(backwardsSummary.containsKey(key)) {
+                graph = backwardsSummary.get(key);
+                graph.merge(path);
+            }else {
+                graph = new SummaryGraph(path);
+                backwardsSummary.put(key, graph);
+            }
+
         }
 
         return null;
@@ -169,7 +187,8 @@ public class SMForwardFunction {
                     if(sourceDfn.getSuccs() != null)
                         for(Set<DataFlowNode> tmpSet : sourceDfn.getSuccs().values()) {
                             for(DataFlowNode nextNode : tmpSet) {
-                                res.add(newPath);
+                                SummaryPath nextPath = newPath.deriveNewMyAccessPath(newPath.getSourceAccessPath(), nextNode.getStmt(), newPath.getTargetAccessPath(), nextNode);
+                                res.add(nextPath);
                             }
                         }
 
@@ -220,7 +239,7 @@ public class SMForwardFunction {
             SootField rightField = targetNode.getField();
 
             //首先处理kill set
-            if(path.getKillSet() != null && !rightField.equals(DataFlowNode.baseField)) {
+            if(path.getKillSet() != null && !rightField.equals(DataFlowNode.baseField) && targetAp.getFields() == null) {
                 if(path.getKillSet().contains(rightField)) {
                     return res;
                 }

@@ -28,13 +28,14 @@ public class SummaryPath {
 
 
     public SummaryPath(Unit src, MyAccessPath sourceAccessPath,
-                       Unit target, MyAccessPath targetAccessPath, DataFlowNode targetNode,
+                       Unit target, MyAccessPath targetAccessPath, DataFlowNode targetNode, boolean isForward,
                        Set<SootField> killSet) {
-        this.src = src;
         this.sourceAccessPath = sourceAccessPath;
-        this.target = target;
         this.targetAccessPath = targetAccessPath;
         this.targetNode = targetNode;
+        this.src = src;
+        this.target = target;
+        this.isForward = isForward;
         this.killSet = killSet;
     }
 
@@ -81,7 +82,7 @@ public class SummaryPath {
     public SummaryPath getInactiveCopy() {
         MyAccessPath newtargetNode = targetAccessPath.deriveInactiveAp(null);
 
-        return new SummaryPath(src, sourceAccessPath, target, newtargetNode, targetNode, killSet);
+        return new SummaryPath(src, sourceAccessPath, target, newtargetNode, targetNode, isForward, killSet);
     }
 
     public SummaryPath deriveNewMyAccessPath(Unit newStmt, MyAccessPath newTarget, DataFlowNode targetNode) {
@@ -90,7 +91,7 @@ public class SummaryPath {
 
     public SummaryPath deriveNewMyAccessPath(MyAccessPath newSrcAp,  Unit newStmt, MyAccessPath newTarget, DataFlowNode targetNode) {
 
-        SummaryPath newSp =  new SummaryPath(src, sourceAccessPath, newStmt, newTarget, targetNode, killSet);
+        SummaryPath newSp =  new SummaryPath(src, sourceAccessPath, newStmt, newTarget, targetNode,isForward , killSet);
         if(newSrcAp != null)
             newSp.setSourceAccessPath(newSrcAp);
         return newSp;
@@ -112,7 +113,7 @@ public class SummaryPath {
     }
 
     public SummaryPath clone() {
-        return new SummaryPath(src, sourceAccessPath, target, targetAccessPath, targetNode, killSet);
+        return new SummaryPath(src, sourceAccessPath, target, targetAccessPath, targetNode, isForward, killSet);
     }
 
     public SummaryPath deriveNewPathWithKillSet(SootField field) {

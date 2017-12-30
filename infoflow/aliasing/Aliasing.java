@@ -27,6 +27,7 @@ import soot.jimple.infoflow.InfoflowManager;
 import soot.jimple.infoflow.data.Abstraction;
 import soot.jimple.infoflow.data.AccessPath;
 import soot.jimple.infoflow.data.AccessPathFactory.BasePair;
+import soot.jimple.infoflow.solver.IInfoflowSolver;
 import soot.jimple.infoflow.util.TypeUtils;
 import soot.jimple.toolkits.pointer.LocalMustAliasAnalysis;
 import soot.jimple.toolkits.pointer.StrongLocalMustAliasAnalysis;
@@ -419,4 +420,7 @@ public class Aliasing {
 		this.excludedFromMustAliasAnalysis.add(method);
 	}
 
+	public IInfoflowSolver getBackwardsSolver() {
+		return this.aliasingStrategy.getSolver();
+	}
 }

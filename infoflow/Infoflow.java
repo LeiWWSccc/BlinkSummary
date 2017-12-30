@@ -61,6 +61,7 @@ import soot.jimple.infoflow.sparseOptimization.dataflowgraph.InnerBBFastBuildDFG
 import soot.jimple.infoflow.sparseOptimization.dataflowgraph.data.DataFlowNode;
 import soot.jimple.infoflow.sparseOptimization.problem.BackwardsSparseInfoflowProblem;
 import soot.jimple.infoflow.sparseOptimization.problem.SparseInfoflowProblem;
+import soot.jimple.infoflow.sparseOptimization.summary.SummaryQuery;
 import soot.jimple.infoflow.util.SootMethodRepresentationParser;
 import soot.jimple.infoflow.util.SystemClassHandler;
 import soot.jimple.toolkits.callgraph.ReachableMethods;
@@ -288,15 +289,19 @@ public class Infoflow extends AbstractInfoflow {
 				InnerBBFastBuildDFGSolver dfgSolver = new InnerBBFastBuildDFGSolver(iCfg);
 				long beforeDfgBuild = System.nanoTime();
 				dfgSolver.solve();
-				DataFlowGraphQuery.newInitialize(iCfg, dfgSolver.getNewDfg(), dfgSolver.getNewBackwardDfg(), dfgSolver.getUnitOrderComputingMap());
-				dfgSolver.solveSummary();
-
 				logger.info("Data Flow Graph building took " + (System.nanoTime() - beforeDfgBuild) / 1E9
 						+ " seconds");
 				logger.info("Data Flow Graph building memory consumption " + (getUsedMemory()) / 1E6
 						+ " MB");
+				DataFlowGraphQuery.newInitialize(iCfg, dfgSolver.getNewDfg(), dfgSolver.getNewBackwardDfg(), dfgSolver.getUnitOrderComputingMap());
+				beforeDfgBuild = System.nanoTime();
+				dfgSolver.solveSummary();
+				logger.info("Intra-procedural Summary building took " + (System.nanoTime() - beforeDfgBuild) / 1E9
+						+ " seconds");
+				logger.info("Intra-procedural Summary building memory consumption " + (getUsedMemory()) / 1E6
+						+ " MB");
 				//DataFlowGraphQuery.initialize(iCfg, dfgSolver.getDfg(), dfgSolver.getBackwardDfg(), dfgSolver.getUnitOrderComputingMap());
-
+				SummaryQuery.newInitialize(iCfg, dfgSolver.getForwardSummary(), dfgSolver.getBackwardsSummary(), dfgSolver.getUnitOrderComputingMap());
 //				Map<SootMethod, Map<Value, Map<DFGEntryKey, Pair<BaseInfoStmt, DataFlowNode>>>>
 //						dfg = dfgSolver.getDfg();
 //				manager.setDfg(dfg);
@@ -644,6 +649,7 @@ public class Infoflow extends AbstractInfoflow {
 			maxMemoryConsumption = Math.max(maxMemoryConsumption, getUsedMemory());
 			System.out.println("Maximum memory consumption: " + maxMemoryConsumption / 1E6 + " MB");
 		} catch (Exception ex) {
+			ex.printStackTrace(); // add by wanglei
 			results.addException(ex.getClass().getName() + ": " + ex.getMessage());
 		}
 	}

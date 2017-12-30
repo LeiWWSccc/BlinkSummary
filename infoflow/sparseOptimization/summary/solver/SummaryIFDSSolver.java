@@ -11,7 +11,7 @@
  *     Marc-Andre Laverdiere-Papineau - Fixed race condition
  *     Steven Arzt - Created FastSolver implementation
  ******************************************************************************/
-package soot.jimple.infoflow.solver.fastSolver;
+package soot.jimple.infoflow.sparseOptimization.summary.solver;
 
 
 import com.google.common.cache.CacheBuilder;
@@ -29,6 +29,7 @@ import soot.jimple.infoflow.collect.MyConcurrentHashMap;
 import soot.jimple.infoflow.memory.IMemoryBoundedSolver;
 import soot.jimple.infoflow.solver.executors.InterruptableExecutor;
 import soot.jimple.infoflow.solver.executors.SetPoolExecutor;
+import soot.jimple.infoflow.solver.fastSolver.FastSolverLinkedNode;
 import soot.jimple.infoflow.solver.memory.IMemoryManager;
 import soot.jimple.infoflow.sparseOptimization.dataflowgraph.InnerBBFastBuildDFGSolver;
 import soot.jimple.internal.AbstractOpStmt;
@@ -51,86 +52,81 @@ import java.util.concurrent.TimeUnit;
  * @param <I> The type of inter-procedural control-flow graph being used.
  * @see IFDSTabulationProblem
  */
-public class IFDSSolver<N,D extends FastSolverLinkedNode<D, N>,I extends BiDiInterproceduralCFG<N, SootMethod>>
+public class SummaryIFDSSolver<N,D extends FastSolverLinkedNode<D, N>,I extends BiDiInterproceduralCFG<N, SootMethod>>
 			implements IMemoryBoundedSolver {
-	
+
 	public static CacheBuilder<Object, Object> DEFAULT_CACHE_BUILDER = CacheBuilder.newBuilder().concurrencyLevel
 			(Runtime.getRuntime().availableProcessors()).initialCapacity(10000).softValues();
-	
-    protected static final Logger logger = LoggerFactory.getLogger(IFDSSolver.class);
+
+    protected static final Logger logger = LoggerFactory.getLogger(SummaryIFDSSolver.class);
 
     //enable with -Dorg.slf4j.simpleLogger.defaultLogLevel=trace
     public static final boolean DEBUG = logger.isDebugEnabled();
 
 	protected InterruptableExecutor executor;
-	
+
 	@DontSynchronize("only used by single thread")
 	protected int numThreads;
-	
+
 	@SynchronizedBy("thread safe data structure, consistent locking when used")
 	protected MyConcurrentHashMap<PathEdge<N, D>,D> jumpFunctions =
 			new MyConcurrentHashMap<PathEdge<N,D>, D>();
-	
+
 	@SynchronizedBy("thread safe data structure, only modified internally")
 	protected final I icfg;
-	
+
 	//stores summaries that were queried before they were computed
 	//see CC 2010 paper by Naeem, Lhotak and Rodriguez
 	@SynchronizedBy("consistent lock on 'incoming'")
 	protected final MyConcurrentHashMap<Pair<SootMethod,D>,Set<Pair<N,D>>> endSummary =
 			new MyConcurrentHashMap<Pair<SootMethod,D>, Set<Pair<N,D>>>();
-	
+
 	//edges going along calls
 	//see CC 2010 paper by Naeem, Lhotak and Rodriguez
 	@SynchronizedBy("consistent lock on field")
 	protected final MyConcurrentHashMap<Pair<SootMethod,D>,MyConcurrentHashMap<N,Map<D, D>>> incoming =
 			new MyConcurrentHashMap<Pair<SootMethod,D>,MyConcurrentHashMap<N,Map<D, D>>>();
 
-	@SynchronizedBy("consistent lock on field")
-	protected final MyConcurrentHashMap<Pair<SootMethod,D>, N> aliasIncoming =
-			new MyConcurrentHashMap<Pair<SootMethod,D>, N>();
-
-
 	@DontSynchronize("stateless")
 	protected final FlowFunctions<N, D, SootMethod> flowFunctions;
-	
+
 	@DontSynchronize("only used by single thread")
 	protected final Map<N,Set<D>> initialSeeds;
-	
+
 	@DontSynchronize("benign races")
 	public long propagationCount;
-	
+
 	@DontSynchronize("stateless")
 	protected final D zeroValue;
-	
+
 	@DontSynchronize("readOnly")
-	protected final FlowFunctionCache<N,D,SootMethod> ffCache; 
-	
+	protected final FlowFunctionCache<N,D,SootMethod> ffCache;
+
 	@DontSynchronize("readOnly")
 	protected final boolean followReturnsPastSeeds;
-	
+
 	@DontSynchronize("readOnly")
 	protected boolean setJumpPredecessors = false;
-	
+
 	@DontSynchronize("readOnly")
 	private boolean enableMergePointChecking = false;
-	
+
 	@DontSynchronize("readOnly")
 	private boolean singleJoinPointAbstraction = false;
 
 	@DontSynchronize("readOnly")
 	protected IMemoryManager<D, N> memoryManager = null;
-	
+
 	protected boolean solverId;
-	
+
 	private Set<IMemoryBoundedSolverStatusNotification> notificationListeners = new HashSet<>();
 	private boolean killFlag = false;
-	
+
 	/**
 	 * Creates a solver for the given problem, which caches flow functions and edge functions.
 	 * The solver must then be started by calling {@link #solve()}.
 	 */
-	public IFDSSolver(IFDSTabulationProblem<N,D,SootMethod,I> tabulationProblem) {
+	public SummaryIFDSSolver(IFDSTabulationProblem<N,D,SootMethod,I> tabulationProblem) {
 		this(tabulationProblem, DEFAULT_CACHE_BUILDER);
 	}
 
@@ -142,8 +138,8 @@ public class IFDSSolver<N,D extends FastSolverLinkedNode<D, N>,I extends BiDiInt
 	 * @param flowFunctionCacheBuilder A valid {@link CacheBuilder} or
 	 * <code>null</code> if no caching is to be used for flow functions.
 	 */
-	public IFDSSolver(IFDSTabulationProblem<N,D,SootMethod,I> tabulationProblem,
-			@SuppressWarnings("rawtypes") CacheBuilder flowFunctionCacheBuilder) {
+	public SummaryIFDSSolver(IFDSTabulationProblem<N,D,SootMethod,I> tabulationProblem,
+                             @SuppressWarnings("rawtypes") CacheBuilder flowFunctionCacheBuilder) {
 		if(logger.isDebugEnabled())
 			flowFunctionCacheBuilder = flowFunctionCacheBuilder.recordStats();
 		this.zeroValue = tabulationProblem.zeroValue();
@@ -288,8 +284,6 @@ public class IFDSSolver<N,D extends FastSolverLinkedNode<D, N>,I extends BiDiInt
 //					d3 = memoryManager.handleGeneratedMemoryObject(d2, d3);
 				if (d3 == null)
 					continue;
-
-				d3 = addAliasInComing(sCalledProcN, d3);
 				
 				//for each callee's start point(s)
 //				for(N sP: startPointsOf) {
@@ -304,8 +298,6 @@ public class IFDSSolver<N,D extends FastSolverLinkedNode<D, N>,I extends BiDiInt
 				//line 15.1 of Naeem/Lhotak/Rodriguez
 				if (!addIncoming(sCalledProcN,d3,n,d1,d2))
 					continue;
-
-
 				
 				//line 15.2
 				Set<Pair<N, D>> endSumm = endSummary(sCalledProcN, d3);
@@ -330,8 +322,6 @@ public class IFDSSolver<N,D extends FastSolverLinkedNode<D, N>,I extends BiDiInt
 								// If we have not changed anything in the callee, we do not need the facts
 								// from there. Even if we change something: If we don't need the concrete
 								// path, we can skip the callee in the predecessor chain
-
-								d5 = computeAliasSummary(sCalledProcN, d5);
 								D d5p = d5;
 								if (d5.equals(d2)) {
 									d5p = d2;
@@ -583,9 +573,9 @@ public class IFDSSolver<N,D extends FastSolverLinkedNode<D, N>,I extends BiDiInt
 	 * @param target the target statement
 	 * @param targetVal the target value at the target statement
 	 * @param relatedCallSite for call and return flows the related call statement, <code>null</code> otherwise
-	 *        (this value is not used within this implementation but may be useful for subclasses of {@link IFDSSolver}) 
+	 *        (this value is not used within this implementation but may be useful for subclasses of {@link SummaryIFDSSolver})
 	 * @param isUnbalancedReturn <code>true</code> if this edge is propagating an unbalanced return
-	 *        (this value is not used within this implementation but may be useful for subclasses of {@link IFDSSolver}) 
+	 *        (this value is not used within this implementation but may be useful for subclasses of {@link SummaryIFDSSolver})
 	 */
 	protected void propagate(N def, D sourceVal, N target, D targetVal,
 		/* deliberately exposed to clients */ N relatedCallSite,
@@ -600,9 +590,9 @@ public class IFDSSolver<N,D extends FastSolverLinkedNode<D, N>,I extends BiDiInt
 	 * @param target the target statement
 	 * @param targetVal the target value at the target statement
 	 * @param relatedCallSite for call and return flows the related call statement, <code>null</code> otherwise
-	 *        (this value is not used within this implementation but may be useful for subclasses of {@link IFDSSolver}) 
+	 *        (this value is not used within this implementation but may be useful for subclasses of {@link SummaryIFDSSolver})
 	 * @param isUnbalancedReturn <code>true</code> if this edge is propagating an unbalanced return
-	 *        (this value is not used within this implementation but may be useful for subclasses of {@link IFDSSolver})
+	 *        (this value is not used within this implementation but may be useful for subclasses of {@link SummaryIFDSSolver})
 	 * @param forceRegister True if the jump function must always be registered with jumpFn .
 	 * 		  This can happen when externally injecting edges that don't come out of this
 	 * 		  solver.
@@ -713,18 +703,7 @@ public class IFDSSolver<N,D extends FastSolverLinkedNode<D, N>,I extends BiDiInt
 		Map<D, D> set = summaries.putIfAbsentElseGet(n, new ConcurrentHashMap<D, D>());
 		return set.put(d1, d2) == null;
 	}
-
-
-
-	protected D addAliasInComing(SootMethod m , D d) {
-		return d;
-	}
-
-	protected D computeAliasSummary(SootMethod m , D d) {
-		return d;
-	}
-
-
+	
 	/**
 	 * Factory method for this solver's thread-pool executor.
 	 */

@@ -12,11 +12,7 @@ import java.util.Arrays;
  */
 public class MyAccessPath {
 
-
-
-
     private final Value value;
-
 
     /**
      * list of fields, either they are based on a concrete @value or they indicate a static field
@@ -168,7 +164,6 @@ public class MyAccessPath {
 
         return str;
     }
-
 
 
 }

@@ -6,11 +6,16 @@ import org.slf4j.LoggerFactory;
 import soot.*;
 import soot.jimple.Stmt;
 import soot.jimple.infoflow.InfoflowConfiguration;
+import soot.jimple.infoflow.data.AccessPathFactory;
+import soot.jimple.infoflow.solver.cfg.BackwardsInfoflowCFG;
 import soot.jimple.infoflow.solver.cfg.IInfoflowCFG;
 import soot.jimple.infoflow.sparseOptimization.basicblock.BasicBlock;
 import soot.jimple.infoflow.sparseOptimization.basicblock.BasicBlockGraph;
 import soot.jimple.infoflow.sparseOptimization.dataflowgraph.data.DFGEntryKey;
 import soot.jimple.infoflow.sparseOptimization.dataflowgraph.data.DataFlowNode;
+import soot.jimple.infoflow.sparseOptimization.summary.SMBackwardFunction;
+import soot.jimple.infoflow.sparseOptimization.summary.SMForwardFunction;
+import soot.jimple.infoflow.sparseOptimization.summary.SummaryGraph;
 import soot.jimple.infoflow.sparseOptimization.summary.SummarySolver;
 import soot.jimple.infoflow.util.SystemClassHandler;
 import soot.jimple.toolkits.callgraph.ReachableMethods;
@@ -25,7 +30,11 @@ public class InnerBBFastBuildDFGSolver {
     private final Logger logger = LoggerFactory.getLogger(getClass());
 
     private IInfoflowCFG iCfg;
-    protected InfoflowConfiguration config = new InfoflowConfiguration();
+
+    public static InfoflowConfiguration config = new InfoflowConfiguration();
+
+    public static AccessPathFactory pathFactory = new AccessPathFactory(config);
+
 
     private Map<SootMethod, Map<Value, Map<DFGEntryKey, Pair<BaseInfoStmt, DataFlowNode>>>> dfg = new HashMap<>();
     private Map<DFGEntryKey, Pair<BaseInfoStmt, DataFlowNode>> newDfg = new HashMap<>();
@@ -82,20 +91,41 @@ public class InnerBBFastBuildDFGSolver {
             buildDFGForEachSootMethod(sm);
     }
 
+    private Map<Pair<Unit, Value>, SummaryGraph> forwardSummary = new HashMap(256);
+    private Map<Pair<Unit, Value>, SummaryGraph> backwardsSummary = new HashMap(256);
+
+    public Map<Pair<Unit, Value>, SummaryGraph> getBackwardsSummary() {
+        return backwardsSummary;
+    }
+
+    public Map<Pair<Unit, Value>, SummaryGraph> getForwardSummary() {
+        return forwardSummary;
+    }
+
+    String[] validFunc = {"main","func"};
+
     public void solveSummary() {
 
         for(Map.Entry<SootMethod, Map<Value, BaseInfoStmtSet>> e : BaseInfoSetGroupMap.entrySet()) {
             SootMethod m = e.getKey();
-            if(m.toString().contains("main")) {
-                Map<Value, BaseInfoStmtSet> group = e.getValue();
-                for(Map.Entry<Value, BaseInfoStmtSet> entry : group.entrySet()) {
-                    Value base = entry.getKey();
-                    BaseInfoStmtSet baseInfoStmtSet = entry.getValue();
+            boolean found = false;
+            for(String f : validFunc)
+                if(m.toString().contains(f))
+                    found = true;
+            if(!found) continue;
 
-                    SummarySolver summarySolver = new SummarySolver(newDfg, newBackwardDfg,  baseInfoStmtSet, m, iCfg);
-                    summarySolver.solve();
+            Map<Value, BaseInfoStmtSet> group = e.getValue();
+            for(Map.Entry<Value, BaseInfoStmtSet> entry : group.entrySet()) {
+                Value base = entry.getKey();
+                BaseInfoStmtSet baseInfoStmtSet = entry.getValue();
 
-                }
+                SummarySolver summarySolver = new SummarySolver(newDfg, newBackwardDfg,  baseInfoStmtSet, m, iCfg,new BackwardsInfoflowCFG(iCfg));
+                Pair<SMForwardFunction, SMBackwardFunction> ret = summarySolver.solve();
+                forwardSummary.putAll(ret.getO1().getForwardSummary());
+                forwardSummary.putAll(ret.getO2().getForwardSummary());
+                backwardsSummary.putAll(ret.getO1().getBackwardsSummary());
+                backwardsSummary.putAll(ret.getO2().getBackwardsSummary());
+
             }
 
         }

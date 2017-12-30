@@ -11,10 +11,12 @@ import soot.jimple.infoflow.problems.TaintPropagationResults;
 import soot.jimple.infoflow.source.SourceInfo;
 import soot.jimple.infoflow.sparseOptimization.dataflowgraph.DataFlowGraphQuery;
 import soot.jimple.infoflow.sparseOptimization.dataflowgraph.data.DataFlowNode;
+import soot.jimple.infoflow.sparseOptimization.summary.SummaryQuery;
 import soot.jimple.infoflow.util.ByReferenceBoolean;
 import soot.jimple.infoflow.util.TypeUtils;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -54,11 +56,20 @@ public class SourcePropagationRule extends AbstractTaintPropagationRule {
 							false);
 
 					if(getManager().getConfig().isSparseOptEnabled()) {
-						DataFlowNode dfg = DataFlowGraphQuery.v().useApTofindDataFlowGraph(ap, stmt);
-						if(dfg == null)
-							throw new RuntimeException("Source AccessPath cant find the relative Dfg, it should be built before using! ");
-						res.add(dfg.deriveNewAbsbyAbs(abs));
-
+						if(getManager().getConfig().isSummaryOptEnabled()) {
+							if(ap.isLocal()) {
+								SummaryQuery.v().propagateAbsUsingSummaries(Collections.singleton(d1), getManager().getForwardSolver() , getAliasing().getBackwardsSolver(), abs, stmt);
+							//	Set<Abstraction> newAbsSet = SummaryQuery.v().getForwardAbs(abs, stmt);
+							//	res.addAll(newAbsSet);
+							}else {
+								System.out.println("Source propagation problem , it dont process ap's a instance field accesss");
+							}
+						}else {
+							DataFlowNode dfg = DataFlowGraphQuery.v().useApTofindDataFlowGraph(ap, stmt);
+							if(dfg == null)
+								throw new RuntimeException("Source AccessPath cant find the relative Dfg, it should be built before using! ");
+							res.add(dfg.deriveNewAbsbyAbs(abs));
+						}
 					}else {
 						res.add(abs);
 

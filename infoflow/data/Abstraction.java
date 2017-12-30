@@ -246,7 +246,11 @@ public class Abstraction implements Cloneable, FastSolverLinkedNode<Abstraction,
 	public Unit getActivationUnit(){
 		return this.activationUnit;
 	}
-	
+
+	public void setActivationUnit(Unit activationUnit) {
+		this.activationUnit = activationUnit;
+	}
+
 	public Abstraction getActiveCopy(){
 		if (this.isAbstractionActive())
 			return this;

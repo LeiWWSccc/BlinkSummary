@@ -8,7 +8,7 @@
  * Contributors: Christian Fritz, Steven Arzt, Siegfried Rasthofer, Eric
  * Bodden, and others.
  ******************************************************************************/
-package soot.jimple.infoflow.sparseOptimization.problem;
+package soot.jimple.infoflow.sparseOptimization.summary.problem;
 
 import heros.FlowFunction;
 import heros.FlowFunctions;
@@ -32,14 +32,13 @@ import soot.jimple.infoflow.solver.functions.SolverNormalFlowFunction;
 import soot.jimple.infoflow.solver.functions.SolverReturnFlowFunction;
 import soot.jimple.infoflow.sparseOptimization.dataflowgraph.DataFlowGraphQuery;
 import soot.jimple.infoflow.sparseOptimization.dataflowgraph.data.DataFlowNode;
-import soot.jimple.infoflow.sparseOptimization.summary.SummaryQuery;
 import soot.jimple.infoflow.util.BaseSelector;
 import soot.jimple.infoflow.util.ByReferenceBoolean;
 import soot.jimple.infoflow.util.TypeUtils;
 
 import java.util.*;
 
-public class SparseInfoflowProblem extends AbstractInfoflowProblem {
+public class SummaryInfoflowProblem extends AbstractInfoflowProblem {
 
 	private final Aliasing aliasing;
 	private final IAliasingStrategy aliasingStrategy;
@@ -47,10 +46,10 @@ public class SparseInfoflowProblem extends AbstractInfoflowProblem {
 
 	protected final TaintPropagationResults results;
 
-	public SparseInfoflowProblem(InfoflowManager manager,
-                                 IAliasingStrategy aliasingStrategy,
-                                 Aliasing aliasing,
-                                 Abstraction zeroValue) {
+	public SummaryInfoflowProblem(InfoflowManager manager,
+                                  IAliasingStrategy aliasingStrategy,
+                                  Aliasing aliasing,
+                                  Abstraction zeroValue) {
 		super(manager);
 		
 		if (zeroValue != null)
@@ -370,11 +369,6 @@ public class SparseInfoflowProblem extends AbstractInfoflowProblem {
 							return Collections.<Abstraction>emptySet();
 						countNormal3 += (System.nanoTime() - beforeFsolver3);
 
-						if(getManager().getConfig().isSummaryOptEnabled()) {
-							SummaryQuery.v().propagateAbsUsingSummaries(Collections.singleton(d1), getManager().getForwardSolver() , aliasing.getBackwardsSolver(), source, stmt);
-							return Collections.emptySet();
-						}
-
 						// Propagate over an assignment
 						if (src instanceof AssignStmt) {
 							final AssignStmt assignStmt = (AssignStmt) src;
@@ -537,12 +531,7 @@ public class SparseInfoflowProblem extends AbstractInfoflowProblem {
 											Unit idStmt = paramLocalToStmtMap.get(target);
 											if(idStmt == null)
 												throw new RuntimeException("no id stmt of thr param in OP");
-											if(getManager().getConfig().isSummaryOptEnabled()) {
-												newAbs.setUseStmts(Collections.singleton(idStmt));
-												resAbs.add(newAbs);
-											}else {
-												resAbs.add(callHelper(target, idStmt, newAbs));
-											}
+											resAbs.add(callHelper(target, idStmt, newAbs));
 										}
 											//resAbs.add(newAbs);
 									}
@@ -556,12 +545,7 @@ public class SparseInfoflowProblem extends AbstractInfoflowProblem {
 										Unit idStmt = paramLocalToStmtMap.get(target);
 										if(idStmt == null)
 											throw new RuntimeException("no id stmt of thr param in OP");
-										if(getManager().getConfig().isSummaryOptEnabled()) {
-											newAbs.setUseStmts(Collections.singleton(idStmt));
-											resAbs.add(newAbs);
-										}else {
-											resAbs.add(callHelper(target, idStmt, newAbs));
-										}
+										resAbs.add(callHelper(target, idStmt, newAbs));
 
 									}
 									//resAbs.add(newAbs);
@@ -678,13 +662,8 @@ public class SparseInfoflowProblem extends AbstractInfoflowProblem {
 								Abstraction abs = newSource.deriveNewAbstraction(ap, (Stmt) exitStmt);
 								if (abs != null) {
 
-									if(getManager().getConfig().isSummaryOptEnabled()) {
-										SummaryQuery.v().propagateAbsUsingSummaries(callerD1s, getManager().getForwardSolver() , aliasing.getBackwardsSolver(), abs, callSite);
-
-									}else {
-										res.add(callHelper(leftOp, callSite, abs));
-									}
-
+									res.add(callHelper(leftOp, callSite, abs));
+									
 									// Aliases of implicitly tainted variables must be mapped back
 									// into the caller's context on return when we leave the last
 									// implicitly-called method
@@ -770,13 +749,8 @@ public class SparseInfoflowProblem extends AbstractInfoflowProblem {
 
 								if (abs != null) {
 									//res.add(abs);
-									if(getManager().getConfig().isSummaryOptEnabled()) {
-										SummaryQuery.v().propagateAbsUsingSummaries(callerD1s, getManager().getForwardSolver() , aliasing.getBackwardsSolver(), abs, callSite);
-
-									}else {
-										res.add(callHelper(originalCallArg, callSite, abs));
-									}
-
+									res.add(callHelper(originalCallArg, callSite, abs));
+									
 									// Aliases of implicitly tainted variables must be mapped back
 									// into the caller's context on return when we leave the last
 									// implicitly-called method
@@ -825,12 +799,8 @@ public class SparseInfoflowProblem extends AbstractInfoflowProblem {
 									Abstraction abs = newSource.deriveNewAbstraction(ap, (Stmt) exitStmt);										
 									if (abs != null) {
 										//res.add(abs);
-										if(getManager().getConfig().isSummaryOptEnabled()) {
-											SummaryQuery.v().propagateAbsUsingSummaries(callerD1s, getManager().getForwardSolver() , aliasing.getBackwardsSolver(), abs, callSite);
-										}else {
-											res.add(callHelper(callerBaseLocal, callSite, abs));
-										}
-
+										res.add(callHelper(callerBaseLocal, callSite, abs));
+									
 										// Aliases of implicitly tainted variables must be mapped back
 										// into the caller's context on return when we leave the last
 										// implicitly-called method

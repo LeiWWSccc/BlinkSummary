@@ -4,7 +4,10 @@ import heros.solver.Pair;
 import soot.SootField;
 import soot.SootMethod;
 import soot.Value;
+import soot.jimple.IdentityStmt;
+import soot.jimple.ParameterRef;
 import soot.jimple.ReturnStmt;
+import soot.jimple.ThisRef;
 import soot.jimple.infoflow.sparseOptimization.basicblock.BasicBlock;
 import soot.jimple.infoflow.sparseOptimization.basicblock.BasicBlockGraph;
 import soot.jimple.infoflow.sparseOptimization.dataflowgraph.data.DFGEntryKey;
@@ -132,7 +135,13 @@ public class BaseInfoStmtSet {
                     backwardDfgEntryKeyForSummarySet.add(dfgForwardKey);
                 }
 
-
+                //为了之后计算summary 存储入口
+                if(baseInfo.stmt instanceof IdentityStmt) {
+                    final IdentityStmt is = ((IdentityStmt)baseInfo.stmt);
+                    if (is.getRightOp() instanceof ParameterRef || is.getRightOp() instanceof ThisRef){
+                        dfgEntryKeyForSummarySet.add(dfgForwardKey);
+                    }
+                }
 
             }
             if(baseInfo.rightFields != null && baseInfo.rightFields.length == 1) {
@@ -148,7 +157,7 @@ public class BaseInfoStmtSet {
                 tmpforward.put(forpath, fordataFlowNode);
 
                 DataFlowNode dataFlowNode = DataFlowNodeFactory.v().createDataFlowNode
-                        (baseInfo.stmt, baseInfo.base, baseInfo.rightFields[0], true);
+                        (baseInfo.stmt, baseInfo.base, baseInfo.rightFields[0], false);
                 Pair<BaseInfoStmt, DataFlowNode> path = new Pair<BaseInfoStmt, DataFlowNode>(baseInfo, dataFlowNode);
                 seedbackward.put(new DFGEntryKey(baseInfo.stmt, baseInfo.base, baseInfo.rightFields[0]), path);
 
@@ -159,7 +168,7 @@ public class BaseInfoStmtSet {
             if(baseInfo.argsFields != null) {
                 for(int i = 0; i < baseInfo.argsFields.length; i++) {
                     DataFlowNode dataFlowNode = DataFlowNodeFactory.v().createDataFlowNode
-                            (baseInfo.stmt, baseInfo.base, baseInfo.argsFields[i], true);
+                            (baseInfo.stmt, baseInfo.base, baseInfo.argsFields[i], false);
 
                     Pair<BaseInfoStmt, DataFlowNode> path = new Pair<BaseInfoStmt, DataFlowNode>(baseInfo, dataFlowNode);
                     DFGEntryKey forKey =  new DFGEntryKey(baseInfo.stmt, baseInfo.base, baseInfo.argsFields[i]);
@@ -170,8 +179,14 @@ public class BaseInfoStmtSet {
                         int count1 = 0;
                     }
 
+                    //为了之后计算summary 存储入口
+                    if(isInvoker) {
+                        dfgEntryKeyForSummarySet.add(forKey);
+                        backwardDfgEntryKeyForSummarySet.add(forKey);
+                    }
+
                     DataFlowNode dataFlowNodeback = DataFlowNodeFactory.v().createDataFlowNode
-                            (baseInfo.stmt, baseInfo.base, baseInfo.argsFields[i], true);
+                            (baseInfo.stmt, baseInfo.base, baseInfo.argsFields[i], false);
                     Pair<BaseInfoStmt, DataFlowNode> pathback = new Pair<BaseInfoStmt, DataFlowNode>(baseInfo, dataFlowNodeback);
 
                     seedbackward.put(new DFGEntryKey(baseInfo.stmt, baseInfo.base, baseInfo.argsFields[i]), pathback);
@@ -209,12 +224,17 @@ public class BaseInfoStmtSet {
                         retfield = DataFlowNode.baseField;
 
                     DataFlowNode dataFlowNodeback = DataFlowNodeFactory.v().createDataFlowNode
-                            (exitStmt.stmt, retBase, retfield, true);
+                            (exitStmt.stmt, retBase, retfield, false);
                     Pair<BaseInfoStmt, DataFlowNode> pathback = new Pair<BaseInfoStmt, DataFlowNode>(exitStmt, dataFlowNodeback);
 
-                    seedbackward.put(new DFGEntryKey(exitStmt.stmt, retBase, retfield), pathback);
+                    DFGEntryKey dfgBackwardsKey =  new DFGEntryKey(exitStmt.stmt, retBase, retfield);
+                    seedbackward.put(dfgBackwardsKey, pathback);
 
                     tmpbackward.put(pathback, dataFlowNodeback);
+
+                    //summary
+                    backwardDfgEntryKeyForSummarySet.add(dfgBackwardsKey);
+
                 }
 
             }
@@ -233,10 +253,13 @@ public class BaseInfoStmtSet {
                 DataFlowNode dataFlowNodeback = DataFlowNodeFactory.v().createDataFlowNode
                         (exitStmt.stmt, base, field, true);
                 Pair<BaseInfoStmt, DataFlowNode> pathback = new Pair<BaseInfoStmt, DataFlowNode>(exitStmt, dataFlowNodeback);
-
-                seedbackward.put(new DFGEntryKey(exitStmt.stmt, base, field), pathback);
+                DFGEntryKey dfgBackwardsKey = new DFGEntryKey(exitStmt.stmt, base, field);
+                seedbackward.put(dfgBackwardsKey, pathback);
 
                 tmpbackward.put(pathback, dataFlowNodeback);
+
+                backwardDfgEntryKeyForSummarySet.add(dfgBackwardsKey);
+
 
             }
         }

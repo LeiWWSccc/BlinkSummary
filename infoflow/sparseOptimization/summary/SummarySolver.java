@@ -10,6 +10,7 @@ import soot.jimple.infoflow.sparseOptimization.dataflowgraph.BaseInfoStmtSet;
 import soot.jimple.infoflow.sparseOptimization.dataflowgraph.DataFlowGraphQuery;
 import soot.jimple.infoflow.sparseOptimization.dataflowgraph.data.DFGEntryKey;
 import soot.jimple.infoflow.sparseOptimization.dataflowgraph.data.DataFlowNode;
+import soot.jimple.infoflow.sparseOptimization.utils.Utils;
 
 import java.util.*;
 
@@ -18,7 +19,7 @@ import java.util.*;
  */
 public class SummarySolver {
 
-    Set<SummaryPath> seedSet = new HashSet<>();
+    Map<SummaryPath, SummaryPath> seedSet = new HashMap<>();
 
     Map<DFGEntryKey, MyAccessPath> summaryEntry = new HashMap<>();
 
@@ -26,7 +27,19 @@ public class SummarySolver {
     private IInfoflowCFG iCfg;
     private IInfoflowCFG backwardsICfg;
 
-    public static Stmt unknownstmt = new
+
+    private MyAccessPath createBackwardsMyAccessPathFormNode(DataFlowNode node) {
+
+        SootField[] sootFields = null;
+        if(node.getField() != DataFlowNode.baseField) {
+            sootFields = new SootField[1];
+            sootFields[0] = node.getField();
+        }
+
+        MyAccessPath myAp = new MyAccessPath((Local) node.getValue(), sootFields, Utils.unknownStmt, false );
+
+        return myAp;
+    }
 
     private MyAccessPath createMyAccessPathFormNode(DataFlowNode node) {
 
@@ -43,13 +56,44 @@ public class SummarySolver {
 
     private Set<SummaryPath> createSummaryPathFromNode(MyAccessPath source, DataFlowNode node) {
         Set<SummaryPath> ret = new HashSet<>();
-        for(Set<DataFlowNode> tmpset : node.getSuccs().values()) {
-            for(DataFlowNode next : tmpset) {
-                Unit nextStmt = next.getStmt();
-                MyAccessPath target = createMyAccessPathFormNode(next);
-                ret.add(new SummaryPath(node.getStmt(), source, nextStmt, target, next, null));
+        if(node.getSuccs() != null) {
+            for(Set<DataFlowNode> tmpset : node.getSuccs().values()) {
+                for(DataFlowNode next : tmpset) {
+                    Unit nextStmt = next.getStmt();
+                    MyAccessPath target = null;
+                    if(next.getValue() == null) {
+                        //return stmt
+                        target = source.clone();
+                    }else {
+                        target = createMyAccessPathFormNode(next);
+                    }
+                    ret.add(new SummaryPath(node.getStmt(), source, nextStmt, target, next,true, null));
+                }
             }
         }
+
+        return ret;
+    }
+
+
+    private Set<SummaryPath> createBackwardsSummaryPathFromNode(MyAccessPath source, DataFlowNode node) {
+        Set<SummaryPath> ret = new HashSet<>();
+        if(node.getSuccs() != null) {
+            for(Set<DataFlowNode> tmpset : node.getSuccs().values()) {
+                for(DataFlowNode next : tmpset) {
+                    Unit nextStmt = next.getStmt();
+                    MyAccessPath target = null;
+                    if(next.getValue() == null) {
+                        //return stmt
+                        target = source.clone();
+                    }else {
+                        target = createBackwardsMyAccessPathFormNode(next);
+                    }
+                    ret.add(new SummaryPath(node.getStmt(), source, nextStmt, target, next, false,null));
+                }
+            }
+        }
+
         return ret;
     }
 
@@ -70,21 +114,38 @@ public class SummarySolver {
             Pair<BaseInfoStmt, DataFlowNode> ret = dfg.get(key);
             DataFlowNode node = ret.getO2();
             MyAccessPath source = createMyAccessPathFormNode(node);
-            summaryEntry.put(key, source);
-            Set<SummaryPath> path = createSummaryPathFromNode(source, node);
-            seedSet.addAll(path);
+           // summaryEntry.put(key, source);
+            Set<SummaryPath> paths = createSummaryPathFromNode(source, node);
+            for(SummaryPath path : paths) {
+                seedSet.put(path, path);
+            }
 
         }
+
+        for(DFGEntryKey backKey : backwardDfgEntryKeyForSummarySet) {
+
+            Pair<BaseInfoStmt, DataFlowNode> ret = backwardDfg.get(backKey);
+            DataFlowNode node = ret.getO2();
+            MyAccessPath source = createBackwardsMyAccessPathFormNode(node);
+           // summaryEntry.put(backKey, source);
+            Set<SummaryPath> paths = createBackwardsSummaryPathFromNode(source, node);
+            for(SummaryPath path : paths) {
+                seedSet.put(path, path);
+            }
+
+        }
+
+
 
     }
 
 
-    public void solve () {
+    public Pair<SMForwardFunction, SMBackwardFunction> solve () {
 
         Queue<SummaryPath> worklist = new LinkedList<>();
-        worklist.addAll(seedSet);
-        SMForwardFunction forwardFunction = new SMForwardFunction(seedSet, iCfg);
-        SMBackwardFunction backwardFunction = new SMBackwardFunction(seedSet,backwardsICfg);
+        worklist.addAll(seedSet.keySet());
+        SMForwardFunction forwardFunction = new SMForwardFunction(iCfg);
+        SMBackwardFunction backwardFunction = new SMBackwardFunction(backwardsICfg);
 
         while(!worklist.isEmpty()) {
             SummaryPath source = worklist.poll();
@@ -98,23 +159,76 @@ public class SummarySolver {
             if(ret != null && !ret.isEmpty())
                 for(SummaryPath next : ret) {
 
-                    if(next.isForward() && !next.getTargetAccessPath().isActive() && isActiveTaint(source.getTarget(), next.getTargetAccessPath().getActiveStmt(), next.getTarget())) {
-                        next = next.getInactiveCopy();
+                    if(next.isForward() && !next.getTargetAccessPath().isActive() ) {
+                        if(next.getTargetAccessPath().getActiveStmt() != Utils.unknownStmt
+                                && isActiveTaint(source.getTarget(), next.getTargetAccessPath().getActiveStmt(), next.getTarget())){
+                            next = next.getInactiveCopy();
+
+                        }else if(next.getTargetAccessPath().getActiveStmt() == Utils.unknownStmt
+                                && isActiveTaint(source.getTarget(), next.getSrc(), next.getTarget())) {
+                            next = next.getInactiveCopy();
+                        }
                     }
-                    if(seedSet.contains(next))
+
+                    if(seedSet.containsKey(next)) {
+                        if(next.getKillSet() != null) {
+                            SummaryPath origin = seedSet.get(next);
+                            Set<SummaryPath> res = new HashSet<>();
+
+                            SummaryPath remain = computeMergeKillPath(origin, next, res);
+                            seedSet.put(remain, remain);
+
+                            for(SummaryPath path : res) {
+                                if(!seedSet.containsKey(path)) {
+                                    seedSet.put(path, path);
+                                    worklist.offer(path);
+                                }
+                            }
+                        }
                         continue;
-                    seedSet.add(next);
+                    }
+                    seedSet.put(next, next);
                     worklist.offer(next);
                 }
 
         }
 
-        Map<Pair<Unit, Value>, SummaryGraph> forwardSummary = forwardFunction.getSummary();
-        Map<Pair<Unit, Value>, SummaryGraph> backwardsSummary = forwardFunction.getSummary();
+//        Map<Pair<Unit, Value>, SummaryGraph> forwardSummary = forwardFunction.getSummary();
+//        Map<Pair<Unit, Value>, SummaryGraph> backwardsSummary = backwardFunction.getSummary();
 
-        int a = 0;
-        return ;
+        return new Pair<SMForwardFunction, SMBackwardFunction>(forwardFunction, backwardFunction);
+    }
 
+    private SummaryPath computeMergeKillPath(SummaryPath origin, SummaryPath next, Set<SummaryPath> res) {
+        // S1 = A* - A1
+        // S2 = A* - A2
+        // S3 =  S1 U S2 = A* - (A1 ^ A2)
+        // S4 = S3 - S1 =  A1 - (A1 ^ A2)
+        Set<SootField> A1 = origin.getKillSet();
+        Set<SootField> A2 = next.getKillSet();
+        Set<SootField> S3 = new HashSet<>();
+        Set<SootField> S4 = new HashSet<>();
+        for(SootField f : A1) {
+            if(A2.contains(f)) {
+                S3.add(f);
+            }else {
+                S4.add(f);
+            }
+        }
+        SummaryPath ret = origin.clone();
+        if(S3.isEmpty()) {
+            ret.setKillSet(null);
+        }else {
+            ret.setKillSet(S3);
+        }
+        for(SootField f : S4) {
+            MyAccessPath newSourceAp = origin.getSourceAccessPath().deriveNewApAddfield(f);
+            MyAccessPath newTargetAp = origin.getTargetAccessPath().deriveNewApAddfield(f);
+            SummaryPath path = origin.deriveNewMyAccessPath(newSourceAp, origin.getTarget(), newTargetAp, origin.getTargetNode());
+            path.setKillSet(null);
+            res.add(path);
+        }
+        return ret;
     }
 
 

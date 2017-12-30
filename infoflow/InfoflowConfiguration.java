@@ -147,6 +147,8 @@ public class InfoflowConfiguration {
 	private boolean oneSourceAtATime = false;
 
 	private boolean sparseOptEnabled = true;
+	private boolean intraProcSummaryOptEnabled = true;
+
 
 
 	/**
@@ -926,6 +928,22 @@ public class InfoflowConfiguration {
 	 */
 	public void setSparseOptEnabled(boolean sparseOptEnabled) {
 		this.sparseOptEnabled = sparseOptEnabled;
+	}
+
+	/**
+	 * 使用sparse的思想来优化
+	 *
+	 * @return True if sparse opt shall be performed, false otherwise
+	 */
+	public boolean isSummaryOptEnabled() {
+		return intraProcSummaryOptEnabled;
+	}
+
+	/**
+	 * 使用sparse的思想来优化
+	 */
+	public void setSummaryOptEnabled(boolean intraProcSummaryOptEnabled) {
+		this.intraProcSummaryOptEnabled = intraProcSummaryOptEnabled;
 	}
 
 

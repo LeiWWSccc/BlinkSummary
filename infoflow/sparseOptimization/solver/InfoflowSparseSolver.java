@@ -64,7 +64,7 @@ public class InfoflowSparseSolver extends IFDSSolver<Unit, Abstraction, BiDiInte
 
 	@Override
 	public boolean processEdge(PathEdge<Unit, Abstraction> edge){
-		//propagate(defStmt, edge.factAtSource(), edge.getTarget(), edge.factAtTarget(), null, false, true);
+		//propagate(edge.factAtSource(), edge.getTarget(), edge.factAtTarget(), null, false, true);
 		return false;
 	}
 
